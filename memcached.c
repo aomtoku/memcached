@@ -302,11 +302,12 @@ static int add_msghdr(conn *c)
 
     c->msgbytes = 0;
     c->msgused++;
-
-    if (IS_UDP(c->transport)) {
-        /* Leave room for the UDP header, which we'll fill in later. */
-        return add_iov(c, NULL, UDP_HEADER_SIZE);
-    }
+/* BEGIN : tokusashi 20170916 */
+    //if (IS_UDP(c->transport)) {
+    //    /* Leave room for the UDP header, which we'll fill in later. */
+    //    return add_iov(c, NULL, UDP_HEADER_SIZE);
+    //}
+/* END : tokusashi 20170916 */
 
     return 0;
 }
@@ -944,8 +945,10 @@ static int add_chunked_item_iovs(conn *c, item *it, int len) {
  * Constructs a set of UDP headers and attaches them to the outgoing messages.
  */
 static int build_udp_headers(conn *c) {
-    int i;
-    unsigned char *hdr;
+/* BEGIN : tokusashi 20170916 */
+    //int i;
+    //unsigned char *hdr;
+/* END : tokusashi 20170916 */
 
     assert(c != NULL);
 
@@ -965,21 +968,6 @@ static int build_udp_headers(conn *c) {
         }
         c->hdrbuf = (unsigned char *)new_hdrbuf;
         c->hdrsize = c->msgused * 2;
-    }
-
-    hdr = c->hdrbuf;
-    for (i = 0; i < c->msgused; i++) {
-        c->msglist[i].msg_iov[0].iov_base = (void*)hdr;
-        c->msglist[i].msg_iov[0].iov_len = UDP_HEADER_SIZE;
-        *hdr++ = c->request_id / 256;
-        *hdr++ = c->request_id % 256;
-        *hdr++ = i / 256;
-        *hdr++ = i % 256;
-        *hdr++ = c->msgused / 256;
-        *hdr++ = c->msgused % 256;
-        *hdr++ = 0;
-        *hdr++ = 0;
-        assert((void *) hdr == (caddr_t)c->msglist[i].msg_iov[0].iov_base + UDP_HEADER_SIZE);
     }
 
     return 0;
@@ -1286,6 +1274,7 @@ static void write_bin_response(conn *c, void *d, int hlen, int keylen, int dlen)
     } else {
         conn_set_state(c, conn_new_cmd);
     }
+
 }
 
 static void complete_incr_bin(conn *c) {
@@ -2228,8 +2217,9 @@ static void dispatch_bin_command(conn *c) {
                             bodylen);
     }
 
-    if (protocol_error)
+    if (protocol_error) {
         handle_binary_protocol_error(c);
+	}
 }
 
 static void process_bin_update(conn *c) {
@@ -2419,6 +2409,7 @@ static void process_bin_flush(conn *c) {
     c->thread->stats.flush_cmds++;
     pthread_mutex_unlock(&c->thread->stats.mutex);
 
+printf("%d at %s %s\n", __LINE__, __func__, __FILE__);
     write_bin_response(c, NULL, 0, 0, 0);
 }
 
@@ -2454,6 +2445,7 @@ static void process_bin_delete(conn *c) {
             c->thread->stats.slab_stats[ITEM_clsid(it)].delete_hits++;
             pthread_mutex_unlock(&c->thread->stats.mutex);
             item_unlink(it);
+printf("%d at %s %s\n", __LINE__, __func__, __FILE__);
             write_bin_response(c, NULL, 0, 0, 0);
         } else {
             write_bin_error(c, PROTOCOL_BINARY_RESPONSE_KEY_EEXISTS, NULL, 0);
@@ -4336,6 +4328,14 @@ static int try_read_command(conn *c) {
     assert(c->rbytes > 0);
 
     if (c->protocol == negotiating_prot || c->transport == udp_transport)  {
+/* BEGIN : Tokusashi 20170915 */
+//int i;
+//printf("%d at %s %s\n", __LINE__, __func__, __FILE__);
+//printf("%x %x\n",(unsigned char)c->rbuf[0], (unsigned char)PROTOCOL_BINARY_REQ);
+//for(i = 0; i < 24; i++) {
+//	printf("c->rbuf[%d] %x\n", i, (unsigned char)c->rbuf[i]);
+//}
+/* END : Tokusashi 20170915 */
         if ((unsigned char)c->rbuf[0] == (unsigned char)PROTOCOL_BINARY_REQ) {
             c->protocol = binary_prot;
         } else {
@@ -4484,17 +4484,21 @@ static enum try_read_result try_read_udp(conn *c) {
         c->request_id = buf[0] * 256 + buf[1];
 
         /* If this is a multi-packet request, drop it. */
-        if (buf[4] != 0 || buf[5] != 1) {
-            out_string(c, "SERVER_ERROR multi-packet request not supported");
-            return READ_NO_DATA_RECEIVED;
-        }
+/* BEGIN: tokusashi 20170915 */
+        //if (buf[4] != 0 || buf[5] != 1) {
+        //    out_string(c, "SERVER_ERROR multi-packet request not supported");
+        //    return READ_NO_DATA_RECEIVED;
+        //}
+		/* END: tokusashi 20170915 */
 
         /* Don't care about any of the rest of the header. */
-        res -= 8;
-        memmove(c->rbuf, c->rbuf + 8, res);
+		/* BEGIN: tokusashi 20170915 */
+        //res -= 8;
+        //memmove(c->rbuf, c->rbuf + 8, res);
 
         c->rbytes = res;
         c->rcurr = c->rbuf;
+/* END: tokusashi 20170915 */
         return READ_DATA_RECEIVED;
     }
     return READ_NO_DATA_RECEIVED;
@@ -4649,9 +4653,26 @@ static enum transmit_result transmit(conn *c) {
         c->msgcurr++;
     }
     if (c->msgcurr < c->msgused) {
+/* BEGIN : tokusashi 20170916 */
+//int i, j;
+//int num = c->msglist[c->msgcurr].msg_iovlen;
+//unsigned char *buf;
+//int len;
+//printf("c->msgcur : %d num %d\n", c->msgcurr , num);
+//for (j = 0; j < num; j++) {
+//buf = (unsigned char *)&c->msglist[c->msgcurr].msg_iov[j].iov_base;
+//len = c->msglist[c->msgcurr].msg_iov[j].iov_len;
+//printf("IOV[%d] pointer %p len : %d\n", j, buf, len);
+//	for (i = 0; i < len; i++) {
+//		printf("[%d] %02x \n", i, *buf);
+//		buf++;
+//	}
+//}
+//int msglen = c->msglist[c->msgcurr].msg_controllen;
+//printf("msglen:%d\n", msglen);
+/* END : tokusashi 20170916 */
         ssize_t res;
         struct msghdr *m = &c->msglist[c->msgcurr];
-
         res = sendmsg(c->sfd, m, 0);
         if (res > 0) {
             pthread_mutex_lock(&c->thread->stats.mutex);
